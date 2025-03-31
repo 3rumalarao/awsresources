@@ -1,0 +1,68 @@
+Final Requirements Summary
+1. Core Network & Connectivity
+* VPC & Subnets:
+    * Create a single VPC configured with dynamic DHCP options (using "ec2.internal" for the domain name and "AmazonProvidedDNS" for domain name servers).
+    * Provision two public subnets and two private subnets spread across two Availability Zones.
+* Internet & Routing:
+    * Attach an Internet Gateway (IGW) to the VPC.
+    * Deploy a NAT Gateway in one of the public subnets.
+    * Configure route tables so that public subnets route traffic via the IGW and private subnets route through the NAT Gateway.
+* Security & Monitoring:
+    * Implement Network ACLs for subnet-level security.
+    * Enable VPC Flow Logs for monitoring network traffic.
+* Tagging:
+    * Apply common tags (e.g., Environment, Project, Owner) to all resources.
+2. Compute Resources
+* Private Servers (Non-AZ Spread):
+    * Defined via a map (private_servers), where each entry includes:
+        * A unique name (e.g., "private-app1", "private-app2").
+        * A list of AMI IDs.
+        * An instance type (e.g., "t3.medium").
+        * One or more security groups.
+        * An SSH key (key_name) set to "mykey".
+    * These servers are provisioned in a designated private subnet (not distributed across multiple AZs).
+* Application Servers (AZ Spread):
+    * Defined via a map (applications), where for each application (e.g., "app1", "app2", "app3"):
+        * Exactly 2 servers are provisioned (one per Availability Zone).
+        * Each application includes:
+            * A unique application name.
+            * A list of AMI IDs.
+            * An instance type (e.g., "m5.xlarge", "t3.large", "m5.large").
+            * Specific security groups.
+            * A domain name (e.g., "app3-dev.internal.example.com") that follows the format:
+                * [app name]-[environment].internal.example.com This naming ensures the DNS name reflects the application identifier and the target environment.
+            * The SSH key (key_name) set to "mykey".
+        * Each application is fronted by an internal Application Load Balancer (ALB) with a corresponding Route 53 DNS record based on its domain name.
+* Public Instances (Non-AZ Spread):
+    * Defined via a map (public_instances), where each instance includes:
+        * A unique name (e.g., "public-app1", "public-app2").
+        * A list of AMI IDs.
+        * An instance type (e.g., "t3.medium").
+        * Specific security groups.
+        * The SSH key (key_name) set to "mypublickey" (distinct from the one used for private_servers and applications).
+    * These instances are provisioned in a public subnet, receive public IP addresses, and are registered in Route 53 for DNS resolution.
+3. Additional Services
+* EFS (Elastic File System):
+    * Create an EFS file system with performance mode set to "generalPurpose" and encryption enabled.
+    * Mount Points:
+        * Provide dynamic configuration for 2 mount points (e.g., efs_mount_points = ["/mnt/efs1", "/mnt/efs2"]).
+        * These mount points are used by instances to mount the shared file system.
+* RDS MySQL (Production Only):
+    * Deploy an RDS MySQL server with the necessary security groups.
+    * Configure daily snapshots with a retention period of 7 days.
+* Backup & Observability (Production Only):
+    * Backup:
+        * Use AWS Backup to create daily snapshots of all production servers.
+    * Observability:
+        * Implement an observability dashboard (e.g., via CloudWatch) to monitor server performance and usage metrics.
+    * Enable VPC Flow Logs for enhanced network monitoring.
+4. Environment Segregation & IAM
+* Environment-Specific Configuration:
+    * Utilize environment-specific tfvars files (for dev, qa, uat, prod) to set variables such as domain names, subnet CIDRs, and other resource-specific configurations.
+    * The domain names are constructed to include the environment label (e.g., "app3-dev.internal.example.com" for the dev environment).
+* IAM & SSH Access:
+    * Optionally attach a common IAM role (e.g., "my-common-iam-role") to all compute resources.
+    * Private servers and application servers use the SSH key "mykey", while public instances use a different SSH key "mypublickey" for secure access.
+* Tagging & Resource Naming:
+    * Ensure all resources have unique names defined within their respective maps and are tagged with common attributes.
+This complete summary incorporates all updates and corrections, including dynamic EFS mount points for mounting onto instances, distinct SSH key configurations, environment-specific domain names, and production-only backup and RDS configurations.
