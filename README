@@ -1,0 +1,35 @@
+terraform-project/
+├── main.tf
+├── variables.tf
+├── outputs.tf
+├── terraform.tfvars         # (or use env/dev/terraform.tfvars for environment-specific vars)
+├── modules/
+│   ├── vpc/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── ec2/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── alb/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── efs/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   ├── rds/
+│   │   ├── main.tf
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   └── backup/
+│       ├── main.tf
+│       ├── variables.tf
+│       └── outputs.tf
+└── env/
+    ├── dev/
+    │   └── terraform.tfvars
+    └── prod/
+        └── terraform.tfvars
