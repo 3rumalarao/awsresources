@@ -1,0 +1,211 @@
+# Terraform Project Runbook
+
+This runbook provides an overview of the Terraform project, explains the folder structure and modules, describes how to execute the code, and outlines troubleshooting guidelines.
+
+---
+
+## Overview
+
+This Terraform project provisions an AWS infrastructure that includes:
+- A VPC with dynamic DHCP options, public and private subnets, an Internet Gateway (IGW), and a NAT Gateway.
+- Compute resources split into three categories:
+  - **Private Servers:** Instances in a private subnet.
+  - **Application Servers:** Two instances per application (one per AZ) fronted by internal ALBs and Route 53 DNS records.
+  - **Public Instances:** Instances in a public subnet with public IP addresses.
+- Additional services:
+  - **EFS:** An Elastic File System with two dynamic mount points.
+  - **RDS MySQL:** A production-only RDS instance with daily snapshots.
+  - **Backup:** AWS Backup configured to take daily snapshots of production servers.
+- Environment-specific configurations via separate tfvars files (e.g., for dev and prod).
+
+---
+
+## Folder Structure
+
+```plaintext
+terraform-project/
+├── main.tf                   # Root Terraform file orchestrating all modules
+├── variables.tf              # Root variables declaration
+├── outputs.tf                # Root outputs declaration
+├── terraform.tfvars          # Default variable values (or use env-specific files)
+├── modules/
+│   ├── vpc/                  # VPC module
+│   │   ├── main.tf           # VPC resources: VPC, subnets, IGW, NAT Gateway, route tables, DHCP options, flow logs
+│   │   ├── variables.tf      # Input variables for VPC module
+│   │   └── outputs.tf        # Outputs (e.g., VPC ID, subnet IDs)
+│   ├── ec2/                  # EC2 module for instance provisioning
+│   │   ├── main.tf           # EC2 instance resource creation (private, application, public)
+│   │   ├── variables.tf      # Input variables for EC2 module
+│   │   └── outputs.tf        # Outputs (e.g., instance IDs)
+│   ├── alb/                  # ALB module for Application Load Balancers and Route 53 records
+│   │   ├── main.tf           # ALB resource creation, target groups, listeners, and DNS records
+│   │   ├── variables.tf      # Input variables for ALB module
+│   │   └── outputs.tf        # Outputs (e.g., ALB DNS name)
+│   ├── efs/                  # EFS module
+│   │   ├── main.tf           # EFS file system and mount targets
+│   │   ├── variables.tf      # Input variables including mount points and security groups
+│   │   └── outputs.tf        # Outputs (e.g., EFS ID, mount target IDs)
+│   ├── rds/                  # RDS module
+│   │   ├── main.tf           # RDS instance creation (MySQL)
+│   │   ├── variables.tf      # Input variables for RDS module
+│   │   └── outputs.tf        # Outputs (e.g., RDS endpoint)
+│   └── backup/               # Backup module
+│       ├── main.tf           # AWS Backup plan and selection resources
+│       ├── variables.tf      # Input variables for backup configuration
+│       └── outputs.tf        # Outputs (e.g., Backup plan ID)
+└── env/
+    ├── dev/
+    │   └── terraform.tfvars  # Variables for dev environment
+    └── prod/
+        └── terraform.tfvars  # Variables for production environment
+```
+
+---
+
+## Module Descriptions
+
+### VPC Module
+- **Purpose:**  
+  Provisions a VPC, public & private subnets across specified AZs, an Internet Gateway, NAT Gateway, route tables, DHCP options, and optionally VPC Flow Logs.
+- **Key Outputs:**  
+  - `vpc_id`
+  - `public_subnet_ids`
+  - `private_subnet_ids`
+
+### EC2 Module
+- **Purpose:**  
+  Creates EC2 instances based on configuration maps for private servers, application servers, and public instances.
+- **Configuration:**  
+  - **Input Variables:** Instance configuration (AMI, instance type, security groups, key name) and count.
+  - **Usage:**  
+    - Private servers: 1 instance per map entry.
+    - Application servers: 2 instances per map entry (one per AZ).
+    - Public instances: 1 instance per map entry, with public IP assignment.
+- **Key Outputs:**  
+  - Instance IDs for later reference (e.g., in backup module).
+
+### ALB Module
+- **Purpose:**  
+  Creates an internal Application Load Balancer for each application, along with target groups, listeners, and a Route 53 alias record for internal DNS.
+- **Configuration:**  
+  - Uses the application’s domain name to create a DNS record.
+- **Key Outputs:**  
+  - ALB DNS Name.
+
+### EFS Module
+- **Purpose:**  
+  Provisions an EFS file system with mount targets in each private subnet.
+- **Configuration:**  
+  - Accepts a list of dynamic mount points (e.g., `/mnt/efs1` and `/mnt/efs2`), which the instances will use to mount the file system.
+- **Key Outputs:**  
+  - EFS ID and mount target IDs.
+
+### RDS Module
+- **Purpose:**  
+  Creates an RDS MySQL instance for production environments.
+- **Configuration:**  
+  - Provisioned only if enabled (controlled by a boolean flag).
+  - Configured with daily snapshots (retention defined by the variable).
+- **Key Outputs:**  
+  - RDS endpoint.
+
+### Backup Module
+- **Purpose:**  
+  Configures AWS Backup to take daily snapshots of all production servers.
+- **Configuration:**  
+  - Uses a list of instance IDs to create backup selections.
+  - Schedules daily backups via a cron expression.
+- **Key Outputs:**  
+  - Backup plan ID.
+
+---
+
+## Execution Steps
+
+1. **Install Prerequisites:**
+   - [Terraform CLI](https://www.terraform.io/downloads.html)
+   - AWS CLI (configured with proper credentials and region)
+
+2. **Initialize the Terraform Project:**
+   - In the project root, run:
+     ```bash
+     terraform init
+     ```
+
+3. **Select Environment Variables:**
+   - Use environment-specific tfvars files located under `env/dev/terraform.tfvars` or `env/prod/terraform.tfvars`.
+   - To use the production environment, for example:
+     ```bash
+     terraform plan -var-file="env/prod/terraform.tfvars"
+     terraform apply -var-file="env/prod/terraform.tfvars"
+     ```
+
+4. **Plan and Apply:**
+   - Run a plan to preview changes:
+     ```bash
+     terraform plan -var-file="env/dev/terraform.tfvars"
+     ```
+   - If the plan looks good, apply the changes:
+     ```bash
+     terraform apply -var-file="env/dev/terraform.tfvars"
+     ```
+
+5. **Review Outputs:**
+   - After apply, review the outputs (e.g., VPC ID, subnet IDs, ALB DNS names) for further configuration or debugging.
+
+---
+
+## Troubleshooting Guidelines
+
+1. **Terraform Commands:**
+   - **Plan:**  
+     Always run `terraform plan` to validate changes before applying.
+   - **Apply:**  
+     Use `terraform apply` and monitor the output for any errors.
+
+2. **Module-Specific Checks:**
+   - **VPC Module:**  
+     Verify that the VPC, subnets, IGW, NAT Gateway, and route table associations are created as expected in the AWS Console.
+   - **EC2 Module:**  
+     Check instance status, key pair associations, and security group assignments.
+   - **ALB Module:**  
+     Ensure that the ALB is active and the DNS record in Route 53 correctly points to the ALB.
+   - **EFS Module:**  
+     Confirm that the EFS file system is available and that mount targets are created in all specified private subnets. Verify that instances can mount the file system using the provided mount points.
+   - **RDS Module:**  
+     For production, check the RDS instance status and verify daily snapshots.
+   - **Backup Module:**  
+     Review AWS Backup Console to ensure that backup plans and selections are active and that snapshots are being taken as scheduled.
+
+3. **Logging & Diagnostics:**
+   - Check CloudWatch Logs for VPC Flow Logs and any errors related to resource provisioning.
+   - Use the AWS Console for a visual inspection of resources.
+   - Use Terraform state commands (e.g., `terraform state list`) to inspect deployed resources.
+
+4. **Common Errors:**
+   - **Authentication/Authorization Errors:**  
+     Ensure AWS credentials and IAM permissions are correctly configured.
+   - **Resource Conflicts:**  
+     Verify that resource names are unique and that there are no conflicts in security groups or subnets.
+   - **Dependency Issues:**  
+     Make sure that resource dependencies (e.g., NAT Gateway depending on an EIP) are correctly defined.
+
+---
+
+## Additional Notes
+
+- **Environment Management:**  
+  Use different tfvars files for each environment (e.g., dev, prod) to isolate configurations such as domain names, AMI IDs, and RDS settings.
+  
+- **Version Control:**  
+  Keep the Terraform configuration under version control (e.g., Git) to track changes and facilitate collaboration.
+
+- **State Management:**  
+  Consider using remote state storage (e.g., S3 with DynamoDB locking) for team collaboration and state persistence.
+
+- **Module Enhancements:**  
+  You can extend modules as needed. For instance, enhance the EC2 module to support additional user data scripts or customize the ALB module for SSL termination.
+
+---
+
+This runbook should guide you through setting up, executing, and troubleshooting the Terraform code for your AWS infrastructure project.
